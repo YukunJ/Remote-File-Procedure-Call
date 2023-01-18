@@ -15,7 +15,9 @@
 
 #include <arpa/inet.h>
 #include <err.h>
+#include <errno.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +29,7 @@
 #define DEFAULT_ADDRESS "127.0.0.1"
 
 /* the port by default */
-#define DEFAULT_PORT "15440"
+#define DEFAULT_PORT "20080"
 
 /* the waiting queue allowed for server */
 #define WAIT_LOG 64
@@ -53,5 +55,24 @@ int build_server();
  * @return a newly-accepted client socket, or -1 if any error
  */
 int accept_client(int listen_fd);
+
+/**
+ * @brief robust write through the socket
+ * @param fd the socket to send to
+ * @param buf_start the beginning of a buffer of data to send
+ * @param to_write how many bytes to be sent
+ * @return how many bytes are actually sent, should be equal 'to_write'
+ */
+ssize_t robust_write(int fd, char* buf_start, size_t to_write);
+
+/**
+ * @brief robust receive data from the socket
+ * @param fd the socket to receive from
+ * @param buf_start the beginning of a buffer to write data into
+ * @param buf_size the maximum capacity of the buffer
+ * @param exit if the sender exits, exit is set to true
+ * @return how many bytes are actually read and store in 'buf_start'
+ */
+ssize_t robust_read(int fd, char* buf_start, size_t buf_size, bool* exit);
 
 #endif  // SOCKET_H

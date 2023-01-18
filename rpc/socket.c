@@ -103,3 +103,61 @@ int accept_client(int listen_fd) {
 
   return client_fd;
 }
+
+/**
+ * @brief robust write through the socket
+ * @param fd the socket to send to
+ * @param buf_start the beginning of a buffer of data to send
+ * @param to_write how many bytes to be sent
+ * @return how many bytes are actually sent, should be equal 'to_write'
+ */
+ssize_t robust_write(int fd, char *buf_start, size_t to_write) {
+  ssize_t curr_write = 0;
+  ssize_t write;
+  while (curr_write < to_write) {
+    if ((write = send(fd, buf_start + curr_write, to_write - curr_write, 0)) <
+        0) {
+      if (errno != EINTR || errno != EAGAIN) {
+        // problem happens
+        return curr_write;
+      }
+      write = 0;
+    }
+    curr_write += write;
+  }
+  return curr_write;
+}
+
+/**
+ * @brief robust receive data from the socket
+ * @param fd the socket to receive from
+ * @param buf_start the beginning of a buffer to write data into
+ * @param buf_size the maximum capacity of the buffer
+ * @param exit if the sender exits, exit is set to true
+ * @return how many bytes are actually read and store in 'buf_start'
+ */
+ssize_t robust_read(int fd, char *buf_start, size_t buf_size, bool *exit) {
+  ssize_t curr_read = 0;
+  ssize_t read;
+  while (curr_read < buf_size) {
+    read = recv(fd, buf_start + curr_read, buf_size - curr_read, 0);
+    if (read > 0) {
+      curr_read += read;
+    } else if (read == 0) {
+      // exit
+      *exit = true;
+      return curr_read;
+    } else if (read == -1 && errno == EINTR) {
+      // normal interrupt
+      continue;
+    } else if (read == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      // real all
+      break;
+    } else {
+      // problem occurs
+      *exit = true;
+      break;
+    }
+  }
+  return curr_read;
+}
