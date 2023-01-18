@@ -23,12 +23,14 @@ MYLIB_O = mylib.o
 MYLIB = mylib.so
 
 SERVER_FILE = server.c
+SERVER_O = server.o
 SERVER = server
 
 # threading needed for server to serve concurrent requests
 LINK_PTHREAD   = -lpthread
 
 all: $(MYLIB) $(SERVER)
+	export LD_LIBRARY_PATH="$LD_LIBRARY_PATH;$PWD/lib"
 
 #gcc -Wall -fPIC -DPIC -c mylib.c && ld -shared -o mylib.so mylib.o -ldl
 
@@ -36,14 +38,17 @@ $(SOCKET_O) : $(SOCKET_FILE)
 	$(CC) $(CFLAGS) -c $(SOCKET_FILE)
 
 $(MYLIB_O) : $(MYLIB_FILE)
-	$(CC) $(CFLAGS) -DIPC -c $(MYLIB_FILE)
+	$(CC) $(CFLAGS) -DIPC -c $(MYLIB_FILE) $(INCLUDE_PATH)
 
 $(MYLIB): $(MYLIB_O) $(SOCKET_O)
-	ld -shared -o $(MYLIB) $(MYLIB_O) $(SOCKET_O) -ldl
+	ld -shared -o $(MYLIB) $(MYLIB_O) $(SOCKET_O) $(LIBRARY_PATH) -ldl
 	@echo "Successfully Built $(MYLIB)"
 
-$(SERVER): $(SERVER_FILE) $(SOCKET_O)
-	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER_FILE) $(SOCKET) $(LINK_PTHEAD)
+$(SERVER_O): $(SERVER_FILE)
+	$(CC) $(CFLAGS) -c $(SERVER_FILE)
+
+$(SERVER): $(SERVER_O) $(SOCKET_O)
+	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER_O) $(SOCKET_O) $(LINK_PTHEAD)
 	@echo "Successfully built $(SERVER)"
 
 # format command
@@ -52,8 +57,15 @@ format:
 	# clang-format all the source code files
 	find *.c *.h | sed 's| |\\ |g' | xargs clang-format -style=google -i
 
+# submission helper command
+.PHONY: submit
+submit:
+	# submit by compressing tar
+	tar cvzf ../mysolution.tgz Makefile *.h *.c
+
 # clean up command
 .PHONY: clean
 clean:
-	# remove all the files with extension .o or .s or .so and executable
-	rm -f $(SERVER) *.o *.s *.so
+	# remove all the files with extension .o or .s or .so and executable with tar
+	rm -f $(SERVER) *.o *.s *.so ../mysolution.tgz
+
