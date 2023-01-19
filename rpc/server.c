@@ -12,23 +12,37 @@
 
 #include "socket.h"
 
-/* the local buffer size for each read from socket */
-#define BUF_SIZE 1024
+/* storage buffer to store all bytes received from the socket, 1MB by default */
+#define STORAGE_SIZE (1024 * 1024)
 
 /* thread service main entry */
 void *service(void *arg) {
-  char buf[BUF_SIZE + 1];
-  memset(buf, 0, sizeof(buf));
+  char *storage_buf = (char *)calloc(STORAGE_SIZE + 1, sizeof(char));
+  size_t storage_size = 0;
   int client_fd = (int)(intptr_t)arg;
   bool client_exit = false;
-  ssize_t read = robust_read(client_fd, buf, BUF_SIZE, &client_exit);
-  buf[read] = '\0';
-  if (read) {
-    printf("%s\n", buf);
+  while (true) {
+    ssize_t read =
+        robust_read(client_fd, storage_buf, STORAGE_SIZE, &client_exit);
+    if (read > 0 && storage_size + read < STORAGE_SIZE) {
+      storage_size += read;
+    } else {
+      fprintf(stderr,
+              "robust_read returns read=%zd and current storage_size=%zd\n",
+              read, storage_size);
+    }
+    char *message;
+    while ((message = parse_message(storage_buf, &storage_size)) != NULL) {
+      // successfully parse a message, process it
+      printf("%s\n", message);
+      free(message);
+    }
+    if (client_exit) {
+      close(client_fd);
+      break;
+    }
   }
-  if (client_exit) {
-    close(client_fd);
-  }
+  free(storage_buf);
   return NULL;
 }
 

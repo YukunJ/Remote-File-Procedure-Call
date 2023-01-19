@@ -34,6 +34,25 @@
 /* the waiting queue allowed for server */
 #define WAIT_LOG 64
 
+/* the local buffer size for each read from socket */
+#define BUF_SIZE 1024
+
+/* the offset to be added/subtracted dealing with local and remote file
+ * descriptor */
+#define OFFSET 12345
+
+/* the header for message length, should be the first line of the message */
+#define HEADER_MSG_LEN "Message-Length"
+
+/* colon */
+#define COLON ":"
+
+/* the carriage return plus new line used in HTTP */
+#define CRLF "\r\n"
+
+/* the spliter between the message header and message content in communcation */
+#define HEADER_SPLIT "\r\n\r\n"
+
 /**
  * @brief build a client TCP socket connected to the server
  * the server ip and port is extracted out from env variable, or default if not
@@ -74,5 +93,24 @@ ssize_t robust_write(int fd, char* buf_start, size_t to_write);
  * @return how many bytes are actually read and store in 'buf_start'
  */
 ssize_t robust_read(int fd, char* buf_start, size_t buf_size, bool* exit);
+
+/**
+ * @brief send a message to the other side of connection using my protocol
+ * @param fd the socket to send to
+ * @param buf_start the beginning of a buffer of data to send
+ * @param to_write how many bytes to be sent
+ */
+void send_message(int fd, char* buf_start, size_t to_write);
+
+/**
+ * @brief receive a complete message from the other side using my protocol
+ * @param buf a temporary buffer that store all the bytes received from a socket
+ * @param buf_content_ptr a pointer to how many bytes are available in the
+ * buffer
+ * @return a pointer to a dynamically allocated array of message, to be freed by
+ * user. and this func will prune the buffer and its size by removing the
+ * message parsed or if no message available for now, return NULL ptr
+ */
+char* parse_message(char* buf, size_t* buf_size_ptr);
 
 #endif  // SOCKET_H

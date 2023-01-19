@@ -119,6 +119,9 @@ ssize_t robust_write(int fd, char *buf_start, size_t to_write) {
         0) {
       if (errno != EINTR || errno != EAGAIN) {
         // problem happens
+        fprintf(stderr,
+                "robust_write error: to_write = %zu but curr_write = %zd\n",
+                to_write, curr_write);
         return curr_write;
       }
       write = 0;
@@ -156,8 +159,72 @@ ssize_t robust_read(int fd, char *buf_start, size_t buf_size, bool *exit) {
     } else {
       // problem occurs
       *exit = true;
+      fprintf(stderr, "robust_read error: curr_read = %zu\n", curr_read);
       break;
     }
   }
   return curr_read;
+}
+
+/**
+ * @brief send a message to the other side of connection using my protocol
+ * @param fd the socket to send to
+ * @param buf_start the beginning of a buffer of data to send
+ * @param to_write how many bytes to be sent
+ */
+void send_message(int fd, char *buf_start, size_t to_write) {
+  char header_buf[BUF_SIZE + 1];
+  memset(header_buf, 0, sizeof(header_buf));
+  sprintf(header_buf, "%s%s%zu%s", HEADER_MSG_LEN, COLON, to_write,
+          HEADER_SPLIT);
+  robust_write(fd, header_buf, strlen(header_buf));
+  robust_write(fd, buf_start, to_write);
+}
+
+/**
+ * @brief receive a complete message from the other side using my protocol
+ * @param buf a temporary buffer that store all the bytes received from a socket
+ * @param buf_content_ptr a pointer to how many bytes are available in the
+ * buffer
+ * @return a pointer to a dynamically allocated array of message, to be freed by
+ * user. and this func will prune the buffer and its size by removing the
+ * message parsed or if no message available for now, return NULL ptr
+ */
+char *parse_message(char *buf, size_t *buf_size_ptr) {
+  char *split_pos;
+  size_t buf_size = *buf_size_ptr;
+  // find the message header splitter '\r\n\r\n'
+  if ((split_pos = strstr(buf, HEADER_SPLIT)) != NULL) {
+    size_t header_len = split_pos - buf;
+    char *colon_pos;
+    if ((colon_pos = strstr(buf, COLON)) != NULL && colon_pos < split_pos) {
+      char message_len_buf[100];
+      memset(message_len_buf, 0, sizeof(message_len_buf));
+      memcpy(message_len_buf, colon_pos + 1, split_pos - colon_pos - 1);
+      size_t message_len = atoi(message_len_buf);
+      if (message_len <= 0) {
+        fprintf(stderr, "atoi() in parsing message_len fails\n");
+      }
+      if (buf_size >= (header_len + strlen(HEADER_SPLIT) + message_len)) {
+        // this buffer fully contains this message
+        char *message_begin = split_pos + strlen(HEADER_SPLIT);
+        char *message_end = message_begin + message_len;
+        char *message = (char *)calloc(message_len + 1, sizeof(char));
+        memcpy(message, message_begin, message_len);
+        // remove this message from the outside storage buffer
+        size_t new_buf_size = buf_size - (message_end - buf);
+        memmove(buf, message_end, new_buf_size);
+        memset(buf + new_buf_size, 0,
+               buf_size - new_buf_size);  // clear off the free space
+        *buf_size_ptr = new_buf_size;
+        return message;
+      }
+    } else {
+      fprintf(stderr,
+              "should have found a colon in the header line that precedes "
+              "header splitter\n");
+    }
+  }
+  /* not able to parse a full message */
+  return NULL;
 }

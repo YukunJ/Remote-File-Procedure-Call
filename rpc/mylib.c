@@ -29,6 +29,9 @@
 #define GETDIRTREE_COMMAND "getdirtree"
 #define FREEDIRTREE_COMMAND "freedirtree"
 
+/* the server socket to be build once only in init function */
+int server_fd;
+
 // The following line declares a function pointer with the same prototype as the
 // open function.
 int (*orig_open)(const char *pathname, int flags,
@@ -64,82 +67,63 @@ int open(const char *pathname, int flags, ...) {
   // we just print a message, then call through to the original open function
   // (from libc)
   fprintf(stderr, "mylib: open called for path %s\n", pathname);
-  int server_fd = build_client();
-  robust_write(server_fd, OPEN_COMMAND, strlen(OPEN_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, OPEN_COMMAND, strlen(OPEN_COMMAND));
   return orig_open(pathname, flags, m);
 }
 
 // This is our replacement for the close function from libc.
 int close(int fd) {
   fprintf(stderr, "mylib: close called for fd=%d\n", fd);
-  int server_fd = build_client();
-  robust_write(server_fd, CLOSE_COMMAND, strlen(CLOSE_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, CLOSE_COMMAND, strlen(CLOSE_COMMAND));
   return orig_close(fd);
 }
 
 // This is our replacement for the read function from libc.
 ssize_t read(int fd, void *buf, size_t count) {
   fprintf(stderr, "mylib: read called for fd=%d\n", fd);
-  int server_fd = build_client();
-  robust_write(server_fd, READ_COMMAND, strlen(READ_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, READ_COMMAND, strlen(READ_COMMAND));
   return orig_read(fd, buf, count);
 }
 
 // This is our replacement for the write function from libc.
 ssize_t write(int fd, const void *buf, size_t count) {
   fprintf(stderr, "mylib: write called for fd=%d\n", fd);
-  int server_fd = build_client();
-  robust_write(server_fd, WRITE_COMMAND, strlen(WRITE_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, WRITE_COMMAND, strlen(WRITE_COMMAND));
   return orig_write(fd, buf, count);
 }
 
 // This is our replacement for the lseek function from libc.
 off_t lseek(int fd, off_t offset, int whence) {
   fprintf(stderr, "mylib: lseek called for fd=%d\n", fd);
-  int server_fd = build_client();
-  robust_write(server_fd, LSEEK_COMMAND, strlen(LSEEK_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, LSEEK_COMMAND, strlen(LSEEK_COMMAND));
   return orig_lseek(fd, offset, whence);
 }
 
 // This is our replacement for the stat function from libc.
 int stat(const char *restrict pathname, struct stat *restrict statbuf) {
   fprintf(stderr, "mylib: stat called for pathname=%s\n", pathname);
-  int server_fd = build_client();
-  robust_write(server_fd, STAT_COMMAND, strlen(STAT_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, STAT_COMMAND, strlen(STAT_COMMAND));
   return orig_stat(pathname, statbuf);
 }
 
 // This is our replacement for the unlink function from libc.
 int unlink(const char *pathname) {
   fprintf(stderr, "mylib: unlink called for pathname=%s\n", pathname);
-  int server_fd = build_client();
-  robust_write(server_fd, UNLINK_COMMAND, strlen(UNLINK_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, UNLINK_COMMAND, strlen(UNLINK_COMMAND));
   return orig_unlink(pathname);
 }
 
 // This is our replacement for the getdirentries function from libc.
 ssize_t getdirentries(int fd, char *buf, size_t nbytes, off_t *basep) {
   fprintf(stderr, "mylib: getdirentries called for fd=%d\n", fd);
-  int server_fd = build_client();
-  robust_write(server_fd, GETDIRENTRIES_COMMAND,
-               strlen(GETDIRENTRIES_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, GETDIRENTRIES_COMMAND, strlen(GETDIRENTRIES_COMMAND));
   return orig_getdirentries(fd, buf, nbytes, basep);
 }
 
 // This is our replacement for the getdirtree from our own local implementation.
 struct dirtreenode *getdirtree(const char *path) {
   fprintf(stderr, "mylib: getdirtree called for path=%s\n", path);
-  int server_fd = build_client();
-  robust_write(server_fd, GETDIRTREE_COMMAND, strlen(GETDIRTREE_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, GETDIRTREE_COMMAND, strlen(GETDIRTREE_COMMAND));
   return orig_getdirtree(path);
 }
 
@@ -147,9 +131,7 @@ struct dirtreenode *getdirtree(const char *path) {
 // implementation.
 void freedirtree(struct dirtreenode *dt) {
   fprintf(stderr, "mylib: freedirtree called");
-  int server_fd = build_client();
-  robust_write(server_fd, FREEDIRTREE_COMMAND, strlen(FREEDIRTREE_COMMAND) + 1);
-  orig_close(server_fd);
+  send_message(server_fd, FREEDIRTREE_COMMAND, strlen(FREEDIRTREE_COMMAND));
   return orig_freedirtree(dt);
 }
 
@@ -157,6 +139,11 @@ void freedirtree(struct dirtreenode *dt) {
 void _init(void) {
   // set function pointer orig_open to point to the original open function
   fprintf(stderr, "Init mylib for library interposition\n");
+  server_fd = build_client();
+  if (server_fd < 0) {
+    fprintf(stderr, "Fail to build connection with server_fd\n");
+    exit(EXIT_FAILURE);
+  }
   orig_open = dlsym(RTLD_NEXT, OPEN_COMMAND);
   orig_close = dlsym(RTLD_NEXT, CLOSE_COMMAND);
   orig_read = dlsym(RTLD_NEXT, READ_COMMAND);
