@@ -24,7 +24,7 @@ void *service(void *arg) {
   while (true) {
     ssize_t read =
         robust_read(client_fd, storage_buf, STORAGE_SIZE, &client_exit);
-    if (read > 0 && storage_size + read < STORAGE_SIZE) {
+    if (read >= 0 && storage_size + read < STORAGE_SIZE) {
       storage_size += read;
     } else {
       fprintf(stderr,
