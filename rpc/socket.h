@@ -14,6 +14,7 @@
 #define SOCKET_H
 
 #include <arpa/inet.h>
+#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <netinet/in.h>
@@ -31,15 +32,14 @@
 /* the port by default */
 #define DEFAULT_PORT "20080"
 
+/* storage buffer to store all bytes received from the socket, 1MB by default */
+#define STORAGE_SIZE (1024 * 1024)
+
 /* the waiting queue allowed for server */
 #define WAIT_LOG 64
 
 /* the local buffer size for each read from socket */
 #define BUF_SIZE 1024
-
-/* the offset to be added/subtracted dealing with local and remote file
- * descriptor */
-#define OFFSET 12345
 
 /* the header for message length, should be the first line of the message */
 #define HEADER_MSG_LEN "Message-Length"
@@ -85,14 +85,14 @@ int accept_client(int listen_fd);
 ssize_t robust_write(int fd, char* buf_start, size_t to_write);
 
 /**
- * @brief robust receive data from the socket
- * @param fd the socket to receive from
+ * @brief greedily receive all data from the socket
+ * @param fd the socket to receive from, must be non-blocking
  * @param buf_start the beginning of a buffer to write data into
  * @param buf_size the maximum capacity of the buffer
  * @param exit if the sender exits, exit is set to true
  * @return how many bytes are actually read and store in 'buf_start'
  */
-ssize_t robust_read(int fd, char* buf_start, size_t buf_size, bool* exit);
+ssize_t greedy_read(int fd, char* buf_start, size_t buf_size, bool* exit);
 
 /**
  * @brief send a message to the other side of connection using my protocol

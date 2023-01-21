@@ -30,12 +30,24 @@
 /* a few headers in the marshall rpc request and response */
 #define HEADER_COMMAND "Command"
 #define HEADER_ERRNO "Errno"
-#define HEADER_RETURN "Return"
+#define HEADER_RETURN_SIZE "ReturnSize"
 #define HEADER_PARAM "Param"
 #define HEADER_PARAM_NUM "ParamNum"
 
+/* the offset to be added/subtracted dealing with local and remote file
+ * descriptor */
+#define OFFSET 12345
+
+/* the colon between a header and its value */
+#if !defined(COLON)
+#define COLON ":"
+#endif
+
 /* the line splitter in serialized rpc request and response */
 #define LINE_SPLIT "\r\n"
+
+/* the buf size to temporarily store some bytes value */
+#define TEMP_BUF_SIZE 1024
 
 /* the struct for rpc request */
 typedef struct {
@@ -44,6 +56,13 @@ typedef struct {
   size_t* param_sizes; /* size of each param in bytes */
   char** params;       /* pointer to each param in bytes form */
 } rpc_request;
+
+/* the struct for rpc response */
+typedef struct {
+  int errno_num;
+  size_t return_size;
+  char* return_val;
+} rpc_response;
 
 /**
  * @brief factory method for an rpc_request
@@ -76,7 +95,7 @@ size_t serialize_request(rpc_request* request, char* buf);
  * @param buf the beginning of stream containing rpc_request (assume big enough)
  * @return pointer to a re-constructed rpc_request struct
  */
-rpc_request* deserialize_request(char* buf, size_t buf_size);
+rpc_request* deserialize_request(char* buf);
 
 /**
  * @brief pack an integral type into the rpc_request struct
@@ -94,9 +113,53 @@ void pack_integral(rpc_request* request, int offset, size_t val);
  * @param buf the beginning of the byte stream
  * @param buf_size how long is this byte stream
  */
-void pack_pointer(rpc_request* request, int offset, char* buf, size_t buf_size);
+void pack_pointer(rpc_request* request, int offset, const char* buf,
+                  size_t buf_size);
 
 /* debug purpose to print out an rpc_request struct */
 void print_request(rpc_request* request);
+
+/**
+ * @brief serialize the rpc response into a char buffer stream
+ *        the rpc response should already be fully packed ready
+ * @param response pointer to rpc_response struct
+ * @param buf the place to serialize to, assume the buffer is large enough
+ * @return how many bytes are serialized
+ */
+size_t serialize_response(rpc_response* response, char* buf);
+
+/**
+ * @brief from a stream of bytes to reconstruct the rpc_response struct
+ * @param buf the beginning of stream containing rpc_response (assume big
+ * enough)
+ * @return pointer to a re-constructed rpc_response struct
+ */
+rpc_response* deserialize_response(char* buf);
+
+/**
+ * @brief create a rpc_response struct based on an integral return value
+ * @param errno_num the errno
+ * @param return_value the integral return value
+ * @return pointer to an allocated rpc_response struct
+ */
+rpc_response* make_integral_response(int errno_num, size_t return_value);
+
+/**
+ * @brief create a rpc_response struct base on a char stream return value
+ * @param errno_num the errno
+ * @param buf the beginning of char stream
+ * @param buf_size size of the char stream
+ * @return pointer to an allocated rpc_response struct
+ */
+rpc_response* make_pointer_response(int errno_num, char* buf, size_t buf_size);
+
+/**
+ * @brief free the space allocated for the rpc response
+ * @param response pointer to the rpc_response struct
+ */
+void free_response(rpc_response* response);
+
+/* debug purpose to print out an rpc_response struct */
+void print_response(rpc_response* response);
 
 #endif  // MARSHALL_H

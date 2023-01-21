@@ -75,6 +75,10 @@ int build_server() {
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
   addr.sin_port = htons(port);
 
+  /* set the socket to be reuseable */
+  int yes = 1;
+  setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes);
+
   if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr)) < 0) {
     err(EXIT_FAILURE, "listen socket bind failure");
   }
@@ -132,14 +136,14 @@ ssize_t robust_write(int fd, char *buf_start, size_t to_write) {
 }
 
 /**
- * @brief robust receive data from the socket
- * @param fd the socket to receive from
+ * @brief greedily receive all data from the socket
+ * @param fd the socket to receive from, must be non-blocking
  * @param buf_start the beginning of a buffer to write data into
  * @param buf_size the maximum capacity of the buffer
  * @param exit if the sender exits, exit is set to true
  * @return how many bytes are actually read and store in 'buf_start'
  */
-ssize_t robust_read(int fd, char *buf_start, size_t buf_size, bool *exit) {
+ssize_t greedy_read(int fd, char *buf_start, size_t buf_size, bool *exit) {
   ssize_t curr_read = 0;
   ssize_t read;
   while (curr_read < buf_size) {
@@ -173,12 +177,14 @@ ssize_t robust_read(int fd, char *buf_start, size_t buf_size, bool *exit) {
  * @param to_write how many bytes to be sent
  */
 void send_message(int fd, char *buf_start, size_t to_write) {
-  char header_buf[BUF_SIZE + 1];
-  memset(header_buf, 0, sizeof(header_buf));
-  sprintf(header_buf, "%s%s%zu%s", HEADER_MSG_LEN, COLON, to_write,
+  char *storage_buf = (char *)calloc(STORAGE_SIZE, sizeof(char));
+  sprintf(storage_buf, "%s%s%zu%s", HEADER_MSG_LEN, COLON, to_write,
           HEADER_SPLIT);
-  robust_write(fd, header_buf, strlen(header_buf));
-  robust_write(fd, buf_start, to_write);
+  size_t header_len = strlen(storage_buf);
+  memcpy(storage_buf + header_len, buf_start, to_write);
+  assert(robust_write(fd, storage_buf, to_write + header_len) ==
+         to_write + header_len);
+  free(storage_buf);
 }
 
 /**
