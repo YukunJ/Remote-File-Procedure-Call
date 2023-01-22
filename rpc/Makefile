@@ -18,6 +18,9 @@ LIBRARY_PATH = -L../lib
 SOCKET_FILE = socket.c
 SOCKET_O = socket.o
 
+MARSHALL_FILE = marshall.c
+MARSHALL_O = marshall.o
+
 MYLIB_FILE = mylib.c
 MYLIB_O = mylib.o
 MYLIB = mylib.so
@@ -32,7 +35,8 @@ LINK_PTHREAD   = -lpthread
 all: $(MYLIB) $(SERVER)
 	export LD_LIBRARY_PATH="$LD_LIBRARY_PATH;$PWD/lib"
 
-#gcc -Wall -fPIC -DPIC -c mylib.c && ld -shared -o mylib.so mylib.o -ldl
+$(MARSHALL_O): $(MARSHALL_FILE)
+	$(CC) $(CFLAGS) -c $(MARSHALL_FILE)
 
 $(SOCKET_O) : $(SOCKET_FILE)
 	$(CC) $(CFLAGS) -c $(SOCKET_FILE)
@@ -40,15 +44,15 @@ $(SOCKET_O) : $(SOCKET_FILE)
 $(MYLIB_O) : $(MYLIB_FILE)
 	$(CC) $(CFLAGS) -DIPC -c $(MYLIB_FILE) $(INCLUDE_PATH)
 
-$(MYLIB): $(MYLIB_O) $(SOCKET_O)
-	ld -shared -o $(MYLIB) $(MYLIB_O) $(SOCKET_O) $(LIBRARY_PATH) -ldl
+$(MYLIB): $(MYLIB_O) $(SOCKET_O) $(MARSHALL_O)
+	ld -shared -o $(MYLIB) $(MYLIB_O) $(SOCKET_O) $(MARSHALL_O) $(LIBRARY_PATH) -ldl
 	@echo "Successfully Built $(MYLIB)"
 
 $(SERVER_O): $(SERVER_FILE)
 	$(CC) $(CFLAGS) -c $(SERVER_FILE)
 
-$(SERVER): $(SERVER_O) $(SOCKET_O)
-	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER_O) $(SOCKET_O) $(LINK_PTHEAD)
+$(SERVER): $(SERVER_O) $(SOCKET_O) $(MARSHALL_O)
+	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER_O) $(SOCKET_O) $(MARSHALL_O) $(LINK_PTHEAD)
 	@echo "Successfully built $(SERVER)"
 
 # format command
@@ -61,7 +65,7 @@ format:
 .PHONY: submit
 submit:
 	# submit by compressing tar
-	tar cvzf ../mysolution.tgz Makefile *.h *.c
+	tar cvzf ../mysolution.tgz README.md Makefile *.h *.c
 
 # clean up command
 .PHONY: clean
