@@ -156,11 +156,11 @@ rpc_request* deserialize_request(char* buf) {
  * @param offset which param it is in the rpc_request
  * @param val the value to be packed
  */
-void pack_integral(rpc_request* request, int offset, size_t val) {
+void pack_integral(rpc_request* request, int offset, ssize_t val) {
   assert(offset < request->param_num);
   char integral_buf[TEMP_BUF_SIZE];
   memset(integral_buf, 0, sizeof(integral_buf));
-  sprintf(integral_buf, "%zu", val);
+  sprintf(integral_buf, "%ld", val);
   size_t line_len = strlen(integral_buf);
   request->param_sizes[offset] = line_len;
   request->params[offset] = (char*)calloc(line_len + 1, sizeof(char));
@@ -283,12 +283,12 @@ rpc_response* deserialize_response(char* buf) {
  * @param return_value the integral return value
  * @return pointer to an allocated rpc_response struct
  */
-rpc_response* make_integral_response(int errno_num, size_t return_value) {
+rpc_response* make_integral_response(int errno_num, ssize_t return_value) {
   rpc_response* response = (rpc_response*)malloc(sizeof(rpc_response));
   response->errno_num = errno_num;
   char temp_buf[TEMP_BUF_SIZE];
   memset(temp_buf, 0, sizeof(temp_buf));
-  sprintf(temp_buf, "%zu", return_value);
+  sprintf(temp_buf, "%ld", return_value);
   size_t return_size = strlen(temp_buf);
   response->return_size = return_size;
   response->return_val = (char*)calloc(return_size + 1, sizeof(char));

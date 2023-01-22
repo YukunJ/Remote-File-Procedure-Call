@@ -65,7 +65,7 @@ format:
 .PHONY: submit
 submit:
 	# submit by compressing tar
-	tar cvzf ../mysolution.tgz Makefile *.h *.c
+	tar cvzf ../mysolution.tgz README.md Makefile *.h *.c
 
 # clean up command
 .PHONY: clean

@@ -163,7 +163,8 @@ ssize_t greedy_read(int fd, char *buf_start, size_t buf_size, bool *exit) {
     } else {
       // problem occurs
       *exit = true;
-      fprintf(stderr, "robust_read error: curr_read = %zu\n", curr_read);
+      fprintf(stderr, "greedy_read error: read=%zu curr_read = %zu\n", read,
+              curr_read);
       break;
     }
   }
@@ -177,7 +178,7 @@ ssize_t greedy_read(int fd, char *buf_start, size_t buf_size, bool *exit) {
  * @param to_write how many bytes to be sent
  */
 void send_message(int fd, char *buf_start, size_t to_write) {
-  char *storage_buf = (char *)calloc(STORAGE_SIZE, sizeof(char));
+  char *storage_buf = (char *)calloc(HEADER_MAX_LEN + to_write, sizeof(char));
   sprintf(storage_buf, "%s%s%zu%s", HEADER_MSG_LEN, COLON, to_write,
           HEADER_SPLIT);
   size_t header_len = strlen(storage_buf);

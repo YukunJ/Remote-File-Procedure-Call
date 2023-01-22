@@ -8,10 +8,11 @@
  */
 
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <sys/types.h>
 #ifndef MARSHALL_H
 #define MARSHALL_H
 
@@ -104,7 +105,7 @@ rpc_request* deserialize_request(char* buf);
  * @param offset which param it is in the rpc_request
  * @param val the value to be packed
  */
-void pack_integral(rpc_request* request, int offset, size_t val);
+void pack_integral(rpc_request* request, int offset, ssize_t val);
 
 /**
  * @brief pack a byte stream into the rpc_request struct
@@ -142,7 +143,7 @@ rpc_response* deserialize_response(char* buf);
  * @param return_value the integral return value
  * @return pointer to an allocated rpc_response struct
  */
-rpc_response* make_integral_response(int errno_num, size_t return_value);
+rpc_response* make_integral_response(int errno_num, ssize_t return_value);
 
 /**
  * @brief create a rpc_response struct base on a char stream return value

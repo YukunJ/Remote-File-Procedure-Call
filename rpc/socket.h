@@ -53,6 +53,9 @@
 /* the spliter between the message header and message content in communcation */
 #define HEADER_SPLIT "\r\n\r\n"
 
+/* the maximum number of bytes a header could span */
+#define HEADER_MAX_LEN 128
+
 /**
  * @brief build a client TCP socket connected to the server
  * the server ip and port is extracted out from env variable, or default if not

@@ -33,6 +33,10 @@
 /* the server socket to be build once only in init function */
 int server_fd;
 
+/* the global storage buffer for this client only */
+static char *storage_buf = NULL;
+static size_t storage_size = 0;
+
 // The following line declares a function pointer with the same prototype as the
 // open function.
 int (*orig_open)(const char *pathname, int flags,
@@ -57,20 +61,36 @@ struct dirtreenode *(*orig_getdirtree)(const char *path);
 void (*orig_freedirtree)(struct dirtreenode *dt);
 
 /**
+ * @brief serialize a rpc_request struct and send it over network
+ *        the request is freed inside this func
+ * @param fd server fd
+ * @param request pointer to a rpc_request struct
+ */
+void send_request(int fd, rpc_request *request) {
+  // serialize the rpc request and send it through network
+  memset(storage_buf, 0, STORAGE_SIZE + 1);
+  size_t rpc_stream_size = serialize_request(request, storage_buf);
+  free(request);
+
+  // send the rpc request to server
+  send_message(fd, storage_buf, rpc_stream_size);
+}
+
+/**
  * @brief wait for a full message to arrive and parse into rpc_response struct
  *        this is a blocking call
  * @param fd the server fd
  * @return a pointer to an rpc_response
  */
 rpc_response *wait_response(int fd) {
-  char *storage_buf = (char *)calloc(STORAGE_SIZE + 1, sizeof(char));
-  size_t storage_size = 0;
+  memset(storage_buf, 0, STORAGE_SIZE + 1);
+  storage_size = 0;
   char *message = NULL;
   while (message == NULL) {
     bool server_exit = false;
     ssize_t read = greedy_read(fd, storage_buf + storage_size,
                                STORAGE_SIZE - storage_size, &server_exit);
-    if (read >= 0 && storage_size + read <= STORAGE_SIZE) {
+    if (read >= 0 && storage_size + read < STORAGE_SIZE) {
       storage_size += read;
     } else {
       fprintf(stderr,
@@ -80,12 +100,10 @@ rpc_response *wait_response(int fd) {
     message = parse_message(storage_buf, &storage_size);
     if (message) {
       rpc_response *response = deserialize_response(message);
-      free(storage_buf);
       free(message);
       return response;
     }
   }
-  free(storage_buf);
   return NULL;
 }
 
@@ -108,14 +126,8 @@ int open(const char *pathname, int flags, ...) {
   pack_integral(request, 1, flags);
   pack_integral(request, 2, m);
 
-  // serialize the rpc request and send it through network
-  char *stream = (char *)calloc(STORAGE_SIZE, sizeof(char));
-  size_t rpc_stream_size = serialize_request(request, stream);
-  free(request);
-
-  // send the rpc request to server
-  send_message(server_fd, stream, rpc_stream_size);
-  free(stream);
+  // serialize and send request to server
+  send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
@@ -131,9 +143,25 @@ int open(const char *pathname, int flags, ...) {
 // This is our replacement for the close function from libc.
 int close(int fd) {
   fprintf(stderr, "mylib: close called for fd=%d\n", fd);
-  sleep(1);
-  // send_message(server_fd, CLOSE_COMMAND, strlen(CLOSE_COMMAND));
-  return orig_close(fd);
+  if (fd < OFFSET) {
+    // local close operation
+    return orig_close(fd);
+  }
+  // remote fd: prepare the rpc request
+  rpc_request *request = init_request(CLOSE_OP, 1);
+  pack_integral(request, 0, fd);
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+  int remote_return = atoi(response->return_val);
+  if (remote_return < 0) {
+    errno = response->errno_num;
+  }
+  free(response);
+  return remote_return;
 }
 
 // This is our replacement for the read function from libc.
@@ -145,10 +173,28 @@ ssize_t read(int fd, void *buf, size_t count) {
 
 // This is our replacement for the write function from libc.
 ssize_t write(int fd, const void *buf, size_t count) {
-  fprintf(stderr, "mylib: write called for fd=%d\n", fd);
-  sleep(1);
-  // send_message(server_fd, WRITE_COMMAND, strlen(WRITE_COMMAND));
-  return orig_write(fd, buf, count);
+  // fprintf(stderr, "mylib: write called for fd=%d and size=%zu\n", fd, count);
+  if (fd < OFFSET) {
+    // local close operation
+    return orig_write(fd, buf, count);
+  }
+  // remote fd: prepare the rpc request
+  rpc_request *request = init_request(WRITE_OP, 3);
+  pack_integral(request, 0, fd);
+  pack_pointer(request, 1, buf, count);
+  pack_integral(request, 2, count);
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+  ssize_t remote_return = atol(response->return_val);
+  if (remote_return < 0) {
+    errno = response->errno_num;
+  }
+  free(response);
+  return remote_return;
 }
 
 // This is our replacement for the lseek function from libc.
@@ -199,6 +245,8 @@ void freedirtree(struct dirtreenode *dt) {
 void _init(void) {
   // set function pointer orig_open to point to the original open function
   fprintf(stderr, "Init mylib for library interposition\n");
+  storage_buf = (char *)calloc(STORAGE_SIZE + 1, sizeof(char));
+  storage_size = 0;
   server_fd = build_client();
   // non-blocking mode
   fcntl(server_fd, F_SETFL, fcntl(server_fd, F_GETFL) | O_NONBLOCK);
