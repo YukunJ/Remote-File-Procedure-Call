@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/wait.h>
 
 #include "marshall.h"
 #include "socket.h"
@@ -125,11 +126,29 @@ int main(int argc, char *argv[]) {
   while (true) {
     int client_fd = accept_client(listen_fd);
     if (client_fd != -1) {
-      // non-blocking mode
-      fcntl(client_fd, F_SETFL, fcntl(client_fd, F_GETFL) | O_NONBLOCK);
-      service((void *)(intptr_t)client_fd);
+      pid_t id = fork();
+      if (id < 0) {
+        fprintf(stderr, "fork() < 0 error");
+        break;
+      }
+      if (id == 0) {
+        // child
+        close(listen_fd);
+        // non-blocking mode
+        fcntl(client_fd, F_SETFL, fcntl(client_fd, F_GETFL) | O_NONBLOCK);
+        service((void *)(intptr_t)client_fd);
+        return 0;
+      } else {
+        // parent
+        close(client_fd);
+        // try harvest any available zombie child processes
+        int status;
+        while (waitpid(-1, &status, WNOHANG) > 0) {
+        }
+      }
     }
   }
+  // main server thread clean up
   close(listen_fd);
   return 0;
 }
