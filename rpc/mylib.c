@@ -34,7 +34,7 @@
 int server_fd;
 
 /* the global storage buffer for this client only */
-static char *storage_buf = NULL;
+static char storage_buf[STORAGE_SIZE + 1] = {0};
 static size_t storage_size = 0;
 
 // The following line declares a function pointer with the same prototype as the
@@ -245,8 +245,6 @@ void freedirtree(struct dirtreenode *dt) {
 void _init(void) {
   // set function pointer orig_open to point to the original open function
   fprintf(stderr, "Init mylib for library interposition\n");
-  storage_buf = (char *)calloc(STORAGE_SIZE + 1, sizeof(char));
-  storage_size = 0;
   server_fd = build_client();
   // non-blocking mode
   fcntl(server_fd, F_SETFL, fcntl(server_fd, F_GETFL) | O_NONBLOCK);
