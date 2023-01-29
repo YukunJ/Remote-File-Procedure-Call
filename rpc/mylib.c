@@ -109,6 +109,7 @@ rpc_response *wait_response(int fd) {
 
 // This is our replacement for the open function from libc.
 int open(const char *pathname, int flags, ...) {
+  // open is always remote RPC call
   mode_t m = 0;
   if (flags & O_CREAT) {
     va_list a;
@@ -166,16 +167,39 @@ int close(int fd) {
 
 // This is our replacement for the read function from libc.
 ssize_t read(int fd, void *buf, size_t count) {
-  fprintf(stderr, "mylib: read called for fd=%d\n", fd);
-  // send_message(server_fd, READ_COMMAND, strlen(READ_COMMAND));
-  return orig_read(fd, buf, count);
+  fprintf(stderr, "mylib: read called for fd=%d of count %ld\n", fd, count);
+  if (fd < OFFSET) {
+    // local read operation
+    return orig_read(fd, buf, count);
+  }
+  // remote fd: prepare the rpc request
+  rpc_request *request = init_request(READ_OP, 3);
+  pack_integral(request, 0, fd);
+  pack_pointer(request, 1, buf, count);
+  pack_integral(request, 2, count);
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+  ssize_t remote_return_size = response->return_size;
+  if (response->errno_num < 0) {
+    errno = response->errno_num;
+    remote_return_size = -1;
+  } else {
+    // rewrite the read content into client local buffer
+    memcpy(buf, response->return_val, remote_return_size);
+  }
+  free(response);
+  return remote_return_size;
 }
 
 // This is our replacement for the write function from libc.
 ssize_t write(int fd, const void *buf, size_t count) {
   // fprintf(stderr, "mylib: write called for fd=%d and size=%zu\n", fd, count);
   if (fd < OFFSET) {
-    // local close operation
+    // local write operation
     return orig_write(fd, buf, count);
   }
   // remote fd: prepare the rpc request

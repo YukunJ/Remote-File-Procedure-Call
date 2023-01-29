@@ -58,6 +58,21 @@ void serve_close(int client_fd, rpc_request *request, char *stream) {
   send_response(client_fd, response, stream);
 }
 
+/* server the 'read' rpc request */
+void serve_read(int client_fd, rpc_request *request, char *stream) {
+  int old_errno = errno;
+  errno = 0;
+  int fd = atoi(request->params[0]) - OFFSET;  // convert into local fd
+  size_t count = atol(request->params[2]);
+  char *temp_read_buf = (char *)calloc(count + 1, sizeof(char));
+  ssize_t return_val = read(fd, temp_read_buf, count);
+  rpc_response *response = make_pointer_response(
+      errno, temp_read_buf, (return_val >= 0) ? return_val : 0);
+  errno = old_errno;
+  free(temp_read_buf);
+  send_response(client_fd, response, stream);
+}
+
 /* server the 'write' rpc request */
 void serve_write(int client_fd, rpc_request *request, char *stream) {
   int old_errno = errno;
@@ -100,6 +115,9 @@ void *service(void *arg) {
           break;
         case (CLOSE_OP):
           serve_close(client_fd, request, stream);
+          break;
+        case (READ_OP):
+          serve_read(client_fd, request, stream);
           break;
         case (WRITE_OP):
           serve_write(client_fd, request, stream);
