@@ -168,7 +168,7 @@ int close(int fd) {
 
 // This is our replacement for the read function from libc.
 ssize_t read(int fd, void *buf, size_t count) {
-  fprintf(stderr, "mylib: read called for fd=%d of count %ld\n", fd, count);
+  // fprintf(stderr, "mylib: read called for fd=%d of count %ld\n", fd, count);
   if (fd < OFFSET) {
     // local read operation
     return orig_read(fd, buf, count);
