@@ -7,9 +7,11 @@
  * which is able to concurrently serving multiple client requests
  */
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 
 #include "marshall.h"
@@ -48,7 +50,7 @@ void serve_open(int client_fd, rpc_request *request, char *stream) {
   send_response(client_fd, response, stream);
 }
 
-/* server the 'close' rpc request */
+/* serve the 'close' rpc request */
 void serve_close(int client_fd, rpc_request *request, char *stream) {
   int old_errno = errno;
   errno = 0;
@@ -60,7 +62,7 @@ void serve_close(int client_fd, rpc_request *request, char *stream) {
   send_response(client_fd, response, stream);
 }
 
-/* server the 'read' rpc request */
+/* serve the 'read' rpc request */
 void serve_read(int client_fd, rpc_request *request, char *stream) {
   int old_errno = errno;
   errno = 0;
@@ -77,7 +79,7 @@ void serve_read(int client_fd, rpc_request *request, char *stream) {
   send_response(client_fd, response, stream);
 }
 
-/* server the 'write' rpc request */
+/* serve the 'write' rpc request */
 void serve_write(int client_fd, rpc_request *request, char *stream) {
   int old_errno = errno;
   errno = 0;
@@ -88,6 +90,64 @@ void serve_write(int client_fd, rpc_request *request, char *stream) {
   marshall_integral(response, 0, return_val);
   errno = old_errno;
   send_response(client_fd, response, stream);
+}
+
+/* serve the 'lseek' rpc request */
+void serve_lseek(int client_fd, rpc_request *request, char *stream) {
+  int old_errno = errno;
+  errno = 0;
+  int fd = atoi(request->params[0]) - OFFSET;  // convert into local fd
+  off_t offset = atol(request->params[1]);
+  int whence = atoi(request->params[2]);
+  off_t return_val = lseek(fd, offset, whence);
+  rpc_response *response = init_response(errno, 1);
+  marshall_integral(response, 0, return_val);
+  errno = old_errno;
+  send_response(client_fd, response, stream);
+}
+
+/* serve the 'stat' rpc request */
+void serve_stat(int client_fd, rpc_request *request, char *stream) {
+  int old_errno = errno;
+  errno = 0;
+  struct stat temp_stat;
+  memset(&temp_stat, 0, sizeof(struct stat));
+  int return_val = stat(request->params[0], &temp_stat);
+  rpc_response *response = init_response(errno, 2);
+  marshall_integral(response, 0, return_val);
+  marshall_pointer(response, 1, (const char *)&temp_stat, sizeof(struct stat));
+  errno = old_errno;
+  send_response(client_fd, response, stream);
+}
+
+/* serve the 'unlink' rpc request */
+void serve_unlink(int client_fd, rpc_request *request, char *stream) {
+  int old_errno = errno;
+  errno = 0;
+  int return_val = unlink(request->params[0]);
+  rpc_response *response = init_response(errno, 1);
+  marshall_integral(response, 0, return_val);
+  errno = old_errno;
+  send_response(client_fd, response, stream);
+}
+
+/* serve the 'getdirentries' rpc request */
+void serve_getdirentries(int client_fd, rpc_request *request, char *stream) {
+  int old_errno = errno;
+  errno = 0;
+  int fd = atoi(request->params[0]) - OFFSET;  // convert into local fd
+  size_t nbytes = atol(request->params[1]);
+  off_t basep = atol(request->params[2]);
+
+  char *temp_buf = (char *)calloc(nbytes + 1, sizeof(char));
+  ssize_t return_val = getdirentries(fd, temp_buf, nbytes, &basep);
+  rpc_response *response = init_response(errno, 3);
+  marshall_integral(response, 0, return_val);
+  marshall_pointer(response, 1, temp_buf, (return_val >= 0) ? return_val : 0);
+  marshall_integral(response, 2, basep);
+  errno = old_errno;
+  send_response(client_fd, response, stream);
+  free(temp_buf);
 }
 
 /* thread service main entry */
@@ -127,6 +187,18 @@ void *service(void *arg) {
           break;
         case (WRITE_OP):
           serve_write(client_fd, request, stream);
+          break;
+        case (LSEEK_OP):
+          serve_lseek(client_fd, request, stream);
+          break;
+        case (STAT_OP):
+          serve_stat(client_fd, request, stream);
+          break;
+        case (UNLINK_OP):
+          serve_unlink(client_fd, request, stream);
+          break;
+        case (GETDIRENTRIES_OP):
+          serve_getdirentries(client_fd, request, stream);
           break;
         default:
           fprintf(stderr, "Unknown command option:%d\n", request->command_op);

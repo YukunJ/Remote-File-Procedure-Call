@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/stat.h>
 
 #include "marshall.h"
 #include "socket.h"
@@ -222,31 +223,100 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
 // This is our replacement for the lseek function from libc.
 off_t lseek(int fd, off_t offset, int whence) {
-  fprintf(stderr, "mylib: lseek called for fd=%d\n", fd);
-  // send_message(server_fd, LSEEK_COMMAND, strlen(LSEEK_COMMAND));
-  return orig_lseek(fd, offset, whence);
+  fprintf(stderr, "mylib: lseek called for fd=%d offset=%ld and whence=%d\n",
+          fd, offset, whence);
+  if (fd < OFFSET) {
+    // local lseek operation
+    return orig_lseek(fd, offset, whence);
+  }
+  // remote fd: prepare the rpc request
+  rpc_request *request = init_request(LSEEK_OP, 3);
+  pack_integral(request, 0, fd);
+  pack_integral(request, 1, offset);
+  pack_integral(request, 2, whence);
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+  ssize_t remote_return = atol(response->return_vals[0]);
+  if (remote_return < 0) {
+    errno = response->errno_num;
+  }
+  free_response(response);
+  return remote_return;
 }
 
 // This is our replacement for the stat function from libc.
 int stat(const char *restrict pathname, struct stat *restrict statbuf) {
   fprintf(stderr, "mylib: stat called for pathname=%s\n", pathname);
-  // send_message(server_fd, STAT_COMMAND, strlen(STAT_COMMAND));
-  return orig_stat(pathname, statbuf);
+  // prepare the rpc request
+  rpc_request *request = init_request(STAT_OP, 1);
+  pack_pointer(request, 0, pathname, strlen(pathname));
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+  int remote_return = atoi(response->return_vals[0]);
+  memcpy(statbuf, response->return_vals[1], sizeof(struct stat));
+  if (remote_return < 0) {
+    errno = response->errno_num;
+  }
+  free_response(response);
+  return remote_return;
 }
 
 // This is our replacement for the unlink function from libc.
 int unlink(const char *pathname) {
   fprintf(stderr, "mylib: unlink called for pathname=%s\n", pathname);
-  // send_message(server_fd, UNLINK_COMMAND, strlen(UNLINK_COMMAND));
-  return orig_unlink(pathname);
+
+  // prepare the rpc request
+  rpc_request *request = init_request(UNLINK_OP, 1);
+  pack_pointer(request, 0, pathname, strlen(pathname));
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+  int remote_return = atoi(response->return_vals[0]);
+  if (remote_return < 0) {
+    errno = response->errno_num;
+  }
+  free_response(response);
+  return remote_return;
 }
 
 // This is our replacement for the getdirentries function from libc.
 ssize_t getdirentries(int fd, char *buf, size_t nbytes, off_t *basep) {
   fprintf(stderr, "mylib: getdirentries called for fd=%d\n", fd);
-  // send_message(server_fd, GETDIRENTRIES_COMMAND,
-  // strlen(GETDIRENTRIES_COMMAND));
-  return orig_getdirentries(fd, buf, nbytes, basep);
+  if (fd < OFFSET) {
+    // local getdirentries operation
+    return orig_getdirentries(fd, buf, nbytes, basep);
+  }
+  // remote fd: prepare the rpc request
+  rpc_request *request = init_request(GETDIRENTRIES_OP, 3);
+  pack_integral(request, 0, fd);
+  pack_integral(request, 1, nbytes);
+  pack_integral(request, 2, *basep);
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+  ssize_t remote_return = atol(response->return_vals[0]);
+  if (remote_return < 0) {
+    errno = response->errno_num;
+  } else {
+    memcpy(buf, response->return_vals[1], response->return_sizes[1]);
+    *basep = (off_t)(atol(response->return_vals[2]));
+  }
+  free_response(response);
+  return remote_return;
 }
 
 // This is our replacement for the getdirtree from our own local implementation.
