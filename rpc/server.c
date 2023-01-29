@@ -26,7 +26,7 @@ void send_response(int fd, rpc_response *response, char *stream) {
   /* serialize the response into stream */
   memset(stream, 0, STORAGE_SIZE + 1);
   size_t response_size = serialize_response(response, stream);
-  free(response);
+  free_response(response);
   /* send the response back to client */
   send_message(fd, stream, response_size);
 }
@@ -42,7 +42,8 @@ void serve_open(int client_fd, rpc_request *request, char *stream) {
     fd += OFFSET;
   }
   /* prepare rpc response */
-  rpc_response *response = make_integral_response(errno, fd);
+  rpc_response *response = init_response(errno, 1);
+  marshall_integral(response, 0, fd);
   errno = old_errno;
   send_response(client_fd, response, stream);
 }
@@ -53,7 +54,8 @@ void serve_close(int client_fd, rpc_request *request, char *stream) {
   errno = 0;
   int fd = atoi(request->params[0]) - OFFSET;  // convert into local fd
   int return_val = close(fd);
-  rpc_response *response = make_integral_response(errno, return_val);
+  rpc_response *response = init_response(errno, 1);
+  marshall_integral(response, 0, return_val);
   errno = old_errno;
   send_response(client_fd, response, stream);
 }
@@ -66,8 +68,10 @@ void serve_read(int client_fd, rpc_request *request, char *stream) {
   size_t count = atol(request->params[2]);
   char *temp_read_buf = (char *)calloc(count + 1, sizeof(char));
   ssize_t return_val = read(fd, temp_read_buf, count);
-  rpc_response *response = make_pointer_response(
-      errno, temp_read_buf, (return_val >= 0) ? return_val : 0);
+  rpc_response *response = init_response(errno, 2);
+  marshall_integral(response, 0, return_val);
+  marshall_pointer(response, 1, temp_read_buf,
+                   (return_val >= 0) ? return_val : 0);
   errno = old_errno;
   free(temp_read_buf);
   send_response(client_fd, response, stream);
@@ -80,7 +84,8 @@ void serve_write(int client_fd, rpc_request *request, char *stream) {
   int fd = atoi(request->params[0]) - OFFSET;  // convert into local fd
   size_t count = atol(request->params[2]);
   ssize_t return_val = write(fd, request->params[1], count);
-  rpc_response *response = make_integral_response(errno, return_val);
+  rpc_response *response = init_response(errno, 1);
+  marshall_integral(response, 0, return_val);
   errno = old_errno;
   send_response(client_fd, response, stream);
 }
@@ -109,6 +114,7 @@ void *service(void *arg) {
     while ((message = parse_message(storage_buf, &storage_size)) != NULL) {
       // successfully parse a message, parse it into rpc request struct
       rpc_request *request = deserialize_request(message);
+      free(message);
       switch (request->command_op) {
         case (OPEN_OP):
           serve_open(client_fd, request, stream);
@@ -126,8 +132,7 @@ void *service(void *arg) {
           fprintf(stderr, "Unknown command option:%d\n", request->command_op);
           print_request(request);
       }
-      free(request);
-      free(message);
+      free_request(request);
     }
     if (client_exit) {
       close(client_fd);

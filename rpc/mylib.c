@@ -70,7 +70,7 @@ void send_request(int fd, rpc_request *request) {
   // serialize the rpc request and send it through network
   memset(storage_buf, 0, STORAGE_SIZE + 1);
   size_t rpc_stream_size = serialize_request(request, storage_buf);
-  free(request);
+  free_request(request);
 
   // send the rpc request to server
   send_message(fd, storage_buf, rpc_stream_size);
@@ -132,11 +132,11 @@ int open(const char *pathname, int flags, ...) {
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  int remote_fd = atoi(response->return_val);
+  int remote_fd = atoi(response->return_vals[0]);
   if (remote_fd < 0) {
     errno = response->errno_num;
   }
-  free(response);
+  free_response(response);
 
   return remote_fd;
 }
@@ -157,11 +157,11 @@ int close(int fd) {
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  int remote_return = atoi(response->return_val);
+  int remote_return = atoi(response->return_vals[0]);
   if (remote_return < 0) {
     errno = response->errno_num;
   }
-  free(response);
+  free_response(response);
   return remote_return;
 }
 
@@ -183,15 +183,14 @@ ssize_t read(int fd, void *buf, size_t count) {
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  ssize_t remote_return_size = response->return_size;
-  if (response->errno_num < 0) {
+  ssize_t remote_return_size = atol(response->return_vals[0]);
+  if (remote_return_size < 0) {
     errno = response->errno_num;
-    remote_return_size = -1;
   } else {
     // rewrite the read content into client local buffer
-    memcpy(buf, response->return_val, remote_return_size);
+    memcpy(buf, response->return_vals[1], remote_return_size);
   }
-  free(response);
+  free_response(response);
   return remote_return_size;
 }
 
@@ -213,11 +212,11 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  ssize_t remote_return = atol(response->return_val);
+  ssize_t remote_return = atol(response->return_vals[0]);
   if (remote_return < 0) {
     errno = response->errno_num;
   }
-  free(response);
+  free_response(response);
   return remote_return;
 }
 
