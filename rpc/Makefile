@@ -49,10 +49,10 @@ $(MYLIB): $(MYLIB_O) $(SOCKET_O) $(MARSHALL_O)
 	@echo "Successfully Built $(MYLIB)"
 
 $(SERVER_O): $(SERVER_FILE)
-	$(CC) $(CFLAGS) -c $(SERVER_FILE)
+	$(CC) -c $(SERVER_FILE)
 
 $(SERVER): $(SERVER_O) $(SOCKET_O) $(MARSHALL_O)
-	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER_O) $(SOCKET_O) $(MARSHALL_O) $(LINK_PTHEAD)
+	$(CC) -o $(SERVER) $(SERVER_O) $(SOCKET_O) $(MARSHALL_O) $(LINK_PTHEAD)
 	@echo "Successfully built $(SERVER)"
 
 # format command
