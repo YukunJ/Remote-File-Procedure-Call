@@ -121,7 +121,7 @@ ssize_t robust_write(int fd, char *buf_start, size_t to_write) {
   while (curr_write < to_write) {
     if ((write = send(fd, buf_start + curr_write, to_write - curr_write, 0)) <
         0) {
-      if (errno != EINTR || errno != EAGAIN) {
+      if (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK) {
         // problem happens
         fprintf(stderr,
                 "robust_write error: to_write = %zu but curr_write = %zd\n",

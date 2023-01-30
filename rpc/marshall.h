@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+
+#include "dirtree.h"
 #ifndef MARSHALL_H
 #define MARSHALL_H
 
@@ -26,14 +28,23 @@
 #define UNLINK_OP 6
 #define GETDIRENTRIES_OP 7
 #define GETDIRTREE_OP 8
-#define FREEDIRTREE_OP 9
+
+/* parameter place holder */
+#define ONE_PARAMETER 1
+#define TWO_PARAMETER 2
+#define THREE_PARAMETER 3
+#define FIRST_PARAMETER 0
+#define SECOND_PARAMETER 1
+#define THIRD_PARAMETER 2
 
 /* a few headers in the marshall rpc request and response */
 #define HEADER_COMMAND "Command"
 #define HEADER_ERRNO "Errno"
-#define HEADER_RETURN_SIZE "ReturnSize"
 #define HEADER_PARAM "Param"
 #define HEADER_PARAM_NUM "ParamNum"
+#define HEADER_RETURN_NUM "ReturnNum"
+#define HEADER_TREE_NAME "NodeName"
+#define HEADER_TREE_CHILD_NUM "ChildNum"
 
 /* the offset to be added/subtracted dealing with local and remote file
  * descriptor */
@@ -61,8 +72,9 @@ typedef struct {
 /* the struct for rpc response */
 typedef struct {
   int errno_num;
-  size_t return_size;
-  char* return_val;
+  int return_num;
+  size_t* return_sizes;
+  char** return_vals;
 } rpc_response;
 
 /**
@@ -121,6 +133,23 @@ void pack_pointer(rpc_request* request, int offset, const char* buf,
 void print_request(rpc_request* request);
 
 /**
+ * @brief factory method for an rpc_response
+ * it initialize the errno_num and return_num in the struct
+ * and also allocate space for the return_sizes and return_vals array
+ * @param errno_num errno
+ * @param return_num how many return values
+ * @return a dynamically allocated rpc_response struct
+ */
+rpc_response* init_response(int errno_num, int return_num);
+
+/**
+ * @brief free the space allocated for the response
+ *        including the space for params nested
+ * @param response pointer to rpc_response struct
+ */
+void free_response(rpc_response* response);
+
+/**
  * @brief serialize the rpc response into a char buffer stream
  *        the rpc response should already be fully packed ready
  * @param response pointer to rpc_response struct
@@ -138,27 +167,63 @@ size_t serialize_response(rpc_response* response, char* buf);
 rpc_response* deserialize_response(char* buf);
 
 /**
- * @brief create a rpc_response struct based on an integral return value
- * @param errno_num the errno
- * @param return_value the integral return value
- * @return pointer to an allocated rpc_response struct
+ * @brief marshall an integral type into the rpc_response struct
+ *        use size_t since it should be long enough
+ * @param request the pointer to rpc_response struct
+ * @param offset which param it is in the rpc_response
+ * @param val the value to be packed
  */
-rpc_response* make_integral_response(int errno_num, ssize_t return_value);
+void marshall_integral(rpc_response* response, int offset, ssize_t val);
 
 /**
- * @brief create a rpc_response struct base on a char stream return value
- * @param errno_num the errno
- * @param buf the beginning of char stream
- * @param buf_size size of the char stream
- * @return pointer to an allocated rpc_response struct
+ * @brief marshall a byte stream into the rpc_response struct
+ * @param response the pointer to rpc_response struct
+ * @param offset which param it is in the rpc_response
+ * @param buf the beginning of the byte stream
+ * @param buf_size how long is this byte stream
  */
-rpc_response* make_pointer_response(int errno_num, char* buf, size_t buf_size);
+void marshall_pointer(rpc_response* response, int offset, const char* buf,
+                      size_t buf_size);
 
 /**
- * @brief free the space allocated for the rpc response
- * @param response pointer to the rpc_response struct
+ * @brief marshall a recursive dirtreenode struct into a byte buffer
+ * @param root pointer to the root node of this dirtree
+ * @param buf a big enough buffer to hold the serialized dirtree
+ * @return how many bytes are written into buf by this serialization operations
  */
-void free_response(rpc_response* response);
+size_t serialize_dirtree(struct dirtreenode* root, char* buf);
+
+/**
+ * @brief helper function called in 'serialize_dirtree'
+ *       this serialize a single dirtreenode and recursively call it self
+ * @param node pointer to the dirtreenode to be serialized
+ * @param buf the buffer to serialize into
+ * @return next position of the buffer after serialization
+ */
+char* serialize_node(struct dirtreenode* node, char* buf);
+
+/**
+ * @brief unmarshall a recursive dirtreenode struct from a stream buffer
+ * @param buf the buffer containing stream
+ * @return pointer to a dynamically allocated dirtreenode
+ */
+struct dirtreenode* deserialize_dirtree(char* buf);
+
+/**
+ * @brief helper function called in `deserialize_dirtree`
+ *        this deserialize a single dirtreenode and recursively all its children
+ * @param buf to be modified on the fly to reflect how far we go in the stream
+ * buffer
+ * @return a dynamically allocated single dirtreenode with all its children
+ * constructed
+ */
+struct dirtreenode* deserialize_node(char** buf);
+
+/**
+ * @brief recursively release memory allocated for the node and all its children
+ * @param root pointer to the root dirtreenode
+ */
+void free_dirtreenode(struct dirtreenode* root);
 
 /* debug purpose to print out an rpc_response struct */
 void print_response(rpc_response* response);
