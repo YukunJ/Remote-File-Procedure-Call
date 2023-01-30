@@ -118,22 +118,18 @@ int open(const char *pathname, int flags, ...) {
     m = va_arg(a, mode_t);
     va_end(a);
   }
-  // we just print a message, then call through to the original open function
-  // (from libc)
-  fprintf(stderr, "mylib: open called for path %s\n", pathname);
-
   // prepare the rpc request
-  rpc_request *request = init_request(OPEN_OP, 3);
-  pack_pointer(request, 0, pathname, strlen(pathname));
-  pack_integral(request, 1, flags);
-  pack_integral(request, 2, m);
+  rpc_request *request = init_request(OPEN_OP, THREE_PARAMETER);
+  pack_pointer(request, FIRST_PARAMETER, pathname, strlen(pathname));
+  pack_integral(request, SECOND_PARAMETER, flags);
+  pack_integral(request, THIRD_PARAMETER, m);
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  int remote_fd = atoi(response->return_vals[0]);
+  int remote_fd = atoi(response->return_vals[FIRST_PARAMETER]);
   if (remote_fd < 0) {
     errno = response->errno_num;
   }
@@ -144,21 +140,20 @@ int open(const char *pathname, int flags, ...) {
 
 // This is our replacement for the close function from libc.
 int close(int fd) {
-  fprintf(stderr, "mylib: close called for fd=%d\n", fd);
   if (fd < OFFSET) {
     // local close operation
     return orig_close(fd);
   }
   // remote fd: prepare the rpc request
-  rpc_request *request = init_request(CLOSE_OP, 1);
-  pack_integral(request, 0, fd);
+  rpc_request *request = init_request(CLOSE_OP, ONE_PARAMETER);
+  pack_integral(request, FIRST_PARAMETER, fd);
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  int remote_return = atoi(response->return_vals[0]);
+  int remote_return = atoi(response->return_vals[FIRST_PARAMETER]);
   if (remote_return < 0) {
     errno = response->errno_num;
   }
@@ -168,28 +163,27 @@ int close(int fd) {
 
 // This is our replacement for the read function from libc.
 ssize_t read(int fd, void *buf, size_t count) {
-  // fprintf(stderr, "mylib: read called for fd=%d of count %ld\n", fd, count);
   if (fd < OFFSET) {
     // local read operation
     return orig_read(fd, buf, count);
   }
   // remote fd: prepare the rpc request
-  rpc_request *request = init_request(READ_OP, 3);
-  pack_integral(request, 0, fd);
-  pack_pointer(request, 1, buf, count);
-  pack_integral(request, 2, count);
+  rpc_request *request = init_request(READ_OP, THREE_PARAMETER);
+  pack_integral(request, FIRST_PARAMETER, fd);
+  pack_pointer(request, SECOND_PARAMETER, buf, count);
+  pack_integral(request, THIRD_PARAMETER, count);
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  ssize_t remote_return_size = atol(response->return_vals[0]);
+  ssize_t remote_return_size = atol(response->return_vals[FIRST_PARAMETER]);
   if (remote_return_size < 0) {
     errno = response->errno_num;
   } else {
     // rewrite the read content into client local buffer
-    memcpy(buf, response->return_vals[1], remote_return_size);
+    memcpy(buf, response->return_vals[SECOND_PARAMETER], remote_return_size);
   }
   free_response(response);
   return remote_return_size;
@@ -197,23 +191,22 @@ ssize_t read(int fd, void *buf, size_t count) {
 
 // This is our replacement for the write function from libc.
 ssize_t write(int fd, const void *buf, size_t count) {
-  // fprintf(stderr, "mylib: write called for fd=%d and size=%zu\n", fd, count);
   if (fd < OFFSET) {
     // local write operation
     return orig_write(fd, buf, count);
   }
   // remote fd: prepare the rpc request
-  rpc_request *request = init_request(WRITE_OP, 3);
-  pack_integral(request, 0, fd);
-  pack_pointer(request, 1, buf, count);
-  pack_integral(request, 2, count);
+  rpc_request *request = init_request(WRITE_OP, THREE_PARAMETER);
+  pack_integral(request, FIRST_PARAMETER, fd);
+  pack_pointer(request, SECOND_PARAMETER, buf, count);
+  pack_integral(request, THIRD_PARAMETER, count);
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  ssize_t remote_return = atol(response->return_vals[0]);
+  ssize_t remote_return = atol(response->return_vals[FIRST_PARAMETER]);
   if (remote_return < 0) {
     errno = response->errno_num;
   }
@@ -223,24 +216,22 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
 // This is our replacement for the lseek function from libc.
 off_t lseek(int fd, off_t offset, int whence) {
-  fprintf(stderr, "mylib: lseek called for fd=%d offset=%ld and whence=%d\n",
-          fd, offset, whence);
   if (fd < OFFSET) {
     // local lseek operation
     return orig_lseek(fd, offset, whence);
   }
   // remote fd: prepare the rpc request
-  rpc_request *request = init_request(LSEEK_OP, 3);
-  pack_integral(request, 0, fd);
-  pack_integral(request, 1, offset);
-  pack_integral(request, 2, whence);
+  rpc_request *request = init_request(LSEEK_OP, THREE_PARAMETER);
+  pack_integral(request, FIRST_PARAMETER, fd);
+  pack_integral(request, SECOND_PARAMETER, offset);
+  pack_integral(request, THIRD_PARAMETER, whence);
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  ssize_t remote_return = atol(response->return_vals[0]);
+  ssize_t remote_return = atol(response->return_vals[FIRST_PARAMETER]);
   if (remote_return < 0) {
     errno = response->errno_num;
   }
@@ -250,18 +241,17 @@ off_t lseek(int fd, off_t offset, int whence) {
 
 // This is our replacement for the stat function from libc.
 int stat(const char *restrict pathname, struct stat *restrict statbuf) {
-  fprintf(stderr, "mylib: stat called for pathname=%s\n", pathname);
   // prepare the rpc request
-  rpc_request *request = init_request(STAT_OP, 1);
-  pack_pointer(request, 0, pathname, strlen(pathname));
+  rpc_request *request = init_request(STAT_OP, ONE_PARAMETER);
+  pack_pointer(request, FIRST_PARAMETER, pathname, strlen(pathname));
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  int remote_return = atoi(response->return_vals[0]);
-  memcpy(statbuf, response->return_vals[1], sizeof(struct stat));
+  int remote_return = atoi(response->return_vals[FIRST_PARAMETER]);
+  memcpy(statbuf, response->return_vals[SECOND_PARAMETER], sizeof(struct stat));
   if (remote_return < 0) {
     errno = response->errno_num;
   }
@@ -271,18 +261,16 @@ int stat(const char *restrict pathname, struct stat *restrict statbuf) {
 
 // This is our replacement for the unlink function from libc.
 int unlink(const char *pathname) {
-  fprintf(stderr, "mylib: unlink called for pathname=%s\n", pathname);
-
   // prepare the rpc request
-  rpc_request *request = init_request(UNLINK_OP, 1);
-  pack_pointer(request, 0, pathname, strlen(pathname));
+  rpc_request *request = init_request(UNLINK_OP, ONE_PARAMETER);
+  pack_pointer(request, FIRST_PARAMETER, pathname, strlen(pathname));
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  int remote_return = atoi(response->return_vals[0]);
+  int remote_return = atoi(response->return_vals[FIRST_PARAMETER]);
   if (remote_return < 0) {
     errno = response->errno_num;
   }
@@ -292,28 +280,28 @@ int unlink(const char *pathname) {
 
 // This is our replacement for the getdirentries function from libc.
 ssize_t getdirentries(int fd, char *buf, size_t nbytes, off_t *basep) {
-  fprintf(stderr, "mylib: getdirentries called for fd=%d\n", fd);
   if (fd < OFFSET) {
     // local getdirentries operation
     return orig_getdirentries(fd, buf, nbytes, basep);
   }
   // remote fd: prepare the rpc request
-  rpc_request *request = init_request(GETDIRENTRIES_OP, 3);
-  pack_integral(request, 0, fd);
-  pack_integral(request, 1, nbytes);
-  pack_integral(request, 2, *basep);
+  rpc_request *request = init_request(GETDIRENTRIES_OP, THREE_PARAMETER);
+  pack_integral(request, FIRST_PARAMETER, fd);
+  pack_integral(request, SECOND_PARAMETER, nbytes);
+  pack_integral(request, THIRD_PARAMETER, *basep);
 
   // serialize and send request to server
   send_request(server_fd, request);
 
   // wait for response from the server, blocking
   rpc_response *response = wait_response(server_fd);
-  ssize_t remote_return = atol(response->return_vals[0]);
+  ssize_t remote_return = atol(response->return_vals[FIRST_PARAMETER]);
   if (remote_return < 0) {
     errno = response->errno_num;
   } else {
-    memcpy(buf, response->return_vals[1], response->return_sizes[1]);
-    *basep = (off_t)(atol(response->return_vals[2]));
+    memcpy(buf, response->return_vals[SECOND_PARAMETER],
+           response->return_sizes[SECOND_PARAMETER]);
+    *basep = (off_t)(atol(response->return_vals[SECOND_PARAMETER]));
   }
   free_response(response);
   return remote_return;
@@ -321,23 +309,34 @@ ssize_t getdirentries(int fd, char *buf, size_t nbytes, off_t *basep) {
 
 // This is our replacement for the getdirtree from our own local implementation.
 struct dirtreenode *getdirtree(const char *path) {
-  fprintf(stderr, "mylib: getdirtree called for path=%s\n", path);
-  // send_message(server_fd, GETDIRTREE_COMMAND, strlen(GETDIRTREE_COMMAND));
-  return orig_getdirtree(path);
+  // prepare the rpc request
+  rpc_request *request = init_request(GETDIRTREE_OP, ONE_PARAMETER);
+  pack_pointer(request, FIRST_PARAMETER, path, strlen(path));
+
+  // serialize and send request to server
+  send_request(server_fd, request);
+
+  // wait for response from the server, blocking
+  rpc_response *response = wait_response(server_fd);
+
+  int remote_errno = response->errno_num;
+  struct dirtreenode *tree = NULL;
+  if (remote_errno == 0) {
+    tree = deserialize_dirtree(response->return_vals[FIRST_PARAMETER]);
+  } else {
+    errno = remote_errno;
+  }
+  free_response(response);
+  return tree;
 }
 
 // This is our replacement for the freedirtree from our own local
 // implementation.
-void freedirtree(struct dirtreenode *dt) {
-  fprintf(stderr, "mylib: freedirtree called");
-  // send_message(server_fd, FREEDIRTREE_COMMAND, strlen(FREEDIRTREE_COMMAND));
-  return orig_freedirtree(dt);
-}
+void freedirtree(struct dirtreenode *dt) { free_dirtreenode(dt); }
 
 // This function is automatically called when program is started
 void _init(void) {
   // set function pointer orig_open to point to the original open function
-  fprintf(stderr, "Init mylib for library interposition\n");
   server_fd = build_client();
   // non-blocking mode
   fcntl(server_fd, F_SETFL, fcntl(server_fd, F_GETFL) | O_NONBLOCK);

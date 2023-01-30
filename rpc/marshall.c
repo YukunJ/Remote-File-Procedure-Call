@@ -370,6 +370,133 @@ void marshall_pointer(rpc_response* response, int offset, const char* buf,
   memcpy(response->return_vals[offset], buf, buf_size);
 }
 
+/**
+ * @brief marshall a recursive dirtreenode struct into a byte buffer
+ * @param root pointer to the root node of this dirtree
+ * @param buf a big enough buffer to hold the serialized dirtree
+ * @return how many bytes are written into buf by this serialization operations
+ */
+size_t serialize_dirtree(struct dirtreenode* root, char* buf) {
+  char* buf_begin = buf;
+  char* buf_end = serialize_node(root, buf);
+  return (size_t)(buf_end - buf_begin);
+}
+
+/**
+ * @brief helper function called in 'serialize_dirtree'
+ *       this serialize a single dirtreenode and recursively call it self
+ * @param node pointer to the dirtreenode to be serialized
+ * @param buf the buffer to serialize into
+ * @return next position of the buffer after serialization
+ */
+char* serialize_node(struct dirtreenode* node, char* buf) {
+  if (node == NULL) {
+    // null node, nothing to serialize
+    return buf;
+  }
+  char temp_buf[TEMP_BUF_SIZE];
+  memset(temp_buf, 0, sizeof(temp_buf));
+
+  /* name of the tree node */
+  sprintf(temp_buf, "%s%s%s%s", HEADER_TREE_NAME, COLON, node->name,
+          LINE_SPLIT);
+  size_t line_len = strlen(temp_buf);
+  memcpy(buf, temp_buf, line_len);
+  buf += line_len;
+  memset(temp_buf, 0, sizeof(temp_buf));
+
+  /* number of children of tree node */
+  sprintf(temp_buf, "%s%s%d%s", HEADER_TREE_CHILD_NUM, COLON, node->num_subdirs,
+          LINE_SPLIT);
+  line_len = strlen(temp_buf);
+  memcpy(buf, temp_buf, line_len);
+  buf += line_len;
+  memset(temp_buf, 0, sizeof(temp_buf));
+
+  /* serialize each child recursively */
+  int child_num = node->num_subdirs;
+  for (int i = 0; i < child_num; i++) {
+    buf = serialize_node(node->subdirs[i], buf);
+  }
+
+  /* return the final position of the buf */
+  return buf;
+}
+
+/**
+ * @brief unmarshall a recursive dirtreenode struct from a stream buffer
+ * @param buf the buffer containing stream
+ * @return pointer to a dynamically allocated dirtreenode
+ */
+struct dirtreenode* deserialize_dirtree(char* buf) {
+  return deserialize_node(&buf);
+}
+
+/**
+ * @brief helper function called in `deserialize_dirtree`
+ *        this deserialize a single dirtreenode and recursively all its children
+ * @param buf to be modified on the fly to reflect how far we go in the stream
+ * buffer
+ * @return a dynamically allocated single dirtreenode with all its children
+ * constructed
+ */
+struct dirtreenode* deserialize_node(char** buf) {
+  struct dirtreenode* node =
+      (struct dirtreenode*)calloc(sizeof(struct dirtreenode), sizeof(char));
+  char temp_buf[TEMP_BUF_SIZE];
+  memset(temp_buf, 0, sizeof(temp_buf));
+  char* buf_ptr = *buf;
+  char* line_end;
+  char* colon;
+
+  /* parse the name line */
+  line_end = strstr(buf_ptr, LINE_SPLIT);
+  colon = strstr(buf_ptr, COLON);
+  assert(colon < line_end);
+  memcpy(temp_buf, colon + 1, line_end - colon - 1);
+  size_t name_len = strlen(temp_buf);
+  node->name =
+      (char*)calloc(name_len + 1, sizeof(char));  // allocate space for name
+  memcpy(node->name, temp_buf, name_len);
+  memset(temp_buf, 0, sizeof(temp_buf));
+  buf_ptr = line_end + strlen(LINE_SPLIT);
+
+  /* parse the child num line */
+  line_end = strstr(buf_ptr, LINE_SPLIT);
+  colon = strstr(buf_ptr, COLON);
+  assert(colon < line_end);
+  memcpy(temp_buf, colon + 1, line_end - colon - 1);
+  sscanf(temp_buf, "%d", &node->num_subdirs);
+  memset(temp_buf, 0, sizeof(temp_buf));
+  buf_ptr = line_end + strlen(LINE_SPLIT);
+
+  /* allocate space for num children struct pointer */
+  node->subdirs = (struct dirtreenode**)calloc(node->num_subdirs,
+                                               sizeof(struct dirtreenode*));
+
+  /* recursively parse child */
+  for (int i = 0; i < node->num_subdirs; i++) {
+    node->subdirs[i] = deserialize_node(&buf_ptr);
+  }
+  *buf = buf_ptr;
+  return node;
+}
+
+/**
+ * @brief recursively release memory allocated for the node and all its children
+ * @param root pointer to the root dirtreenode
+ */
+void free_dirtreenode(struct dirtreenode* root) {
+  if (root != NULL) {
+    free(root->name);
+    for (int i = 0; i < root->num_subdirs; i++) {
+      free_dirtreenode(root->subdirs[i]);
+    }
+    free(root->subdirs);
+  }
+  free(root);
+}
+
 /* debug purpose to print out an rpc_response struct */
 void print_response(rpc_response* response) {
   printf("========RPC Response========\n");

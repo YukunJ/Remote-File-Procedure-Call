@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+#include "dirtree.h"
 #include "marshall.h"
 #include "socket.h"
 
@@ -150,6 +151,24 @@ void serve_getdirentries(int client_fd, rpc_request *request, char *stream) {
   free(temp_buf);
 }
 
+/* serve the 'getdirtree' rpc request */
+void serve_getdirtree(int client_fd, rpc_request *request, char *stream) {
+  int old_errno = errno;
+  errno = 0;
+  char *tree_buf = (char *)calloc(STORAGE_SIZE, sizeof(char));
+  size_t tree_stream_size = 0;
+  struct dirtreenode *local_root = getdirtree(request->params[0]);
+  rpc_response *response = init_response(errno, 1);
+  if (local_root != NULL) {
+    tree_stream_size = serialize_dirtree(local_root, tree_buf);
+  }
+  marshall_pointer(response, 0, tree_buf, tree_stream_size);
+  errno = old_errno;
+  send_response(client_fd, response, stream);
+  freedirtree(local_root);
+  free(tree_buf);
+}
+
 /* thread service main entry */
 void *service(void *arg) {
   /* each client get two designated big buffers */
@@ -199,6 +218,9 @@ void *service(void *arg) {
           break;
         case (GETDIRENTRIES_OP):
           serve_getdirentries(client_fd, request, stream);
+          break;
+        case (GETDIRTREE_OP):
+          serve_getdirtree(client_fd, request, stream);
           break;
         default:
           fprintf(stderr, "Unknown command option:%d\n", request->command_op);
